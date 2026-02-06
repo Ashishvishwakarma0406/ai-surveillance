@@ -1,0 +1,154 @@
+# AI-Powered Video Surveillance System
+# Rule Engine Configuration
+
+# =============================================================================
+# WEAPON DETECTION RULES
+# =============================================================================
+weapon_detection:
+  enabled: true
+  
+  # Consecutive frame threshold
+  # Alert triggered if weapon detected in N consecutive frames
+  consecutive_frames_threshold: 3
+  
+  # Minimum confidence for weapon detection
+  min_confidence: 0.6
+  
+  # Alert settings
+  alert:
+    severity: "critical"
+    message: "WEAPON DETECTED"
+    save_frame: true
+    save_clip: true
+    
+  # Cooldown between alerts (seconds)
+  cooldown: 5
+
+# =============================================================================
+# VIOLENCE DETECTION RULES
+# =============================================================================
+violence_detection:
+  enabled: true
+  
+  # Violence probability threshold
+  probability_threshold: 0.65
+  
+  # Require multiple persons in scene
+  require_multiple_persons: true
+  min_persons: 2
+  
+  # Alert settings
+  alert:
+    severity: "critical"
+    message: "VIOLENCE DETECTED"
+    save_frame: true
+    save_clip: true
+    
+  # Cooldown between alerts (seconds)
+  cooldown: 10
+
+# =============================================================================
+# TRASH/LITTER DETECTION RULES
+# =============================================================================
+trash_detection:
+  enabled: true
+  
+  # Minimum trash objects to trigger
+  min_objects: 2
+  
+  # Proximity to garbage bin (pixels)
+  # If trash is near garbage bin, mark as "overflow"
+  bin_proximity_threshold: 150
+  
+  # Minimum confidence
+  min_confidence: 0.5
+  
+  # Alert settings
+  alert:
+    severity: "warning"
+    message: "TRASH/LITTER DETECTED"
+    save_frame: true
+    save_clip: false
+    
+  # Cooldown between alerts (seconds)
+  cooldown: 30
+
+# =============================================================================
+# GARBAGE OVERFLOW DETECTION RULES
+# =============================================================================
+garbage_overflow:
+  enabled: true
+  
+  # Trash objects near bin threshold
+  trash_near_bin_threshold: 3
+  
+  # Alert settings
+  alert:
+    severity: "warning"
+    message: "GARBAGE OVERFLOW DETECTED"
+    save_frame: true
+    save_clip: false
+    
+  # Cooldown between alerts (seconds)
+  cooldown: 60
+
+# =============================================================================
+# POTHOLE DETECTION RULES
+# =============================================================================
+pothole_detection:
+  enabled: true
+  
+  # Note: Pothole detection is limited with pretrained models
+  # This uses proxy detection and is highly dependent on camera angle
+  
+  # Minimum confidence
+  min_confidence: 0.4
+  
+  # Alert settings
+  alert:
+    severity: "informational"
+    message: "ROAD DEFECT DETECTED"
+    save_frame: true
+    save_clip: false
+    
+  # Cooldown between alerts (seconds)
+  cooldown: 60
+
+# =============================================================================
+# CROWD DENSITY RULES (BONUS)
+# =============================================================================
+crowd_detection:
+  enabled: true
+  
+  # Person count thresholds
+  thresholds:
+    low: 5
+    medium: 10
+    high: 20
+    
+  # Alert settings
+  alert:
+    severity: "informational"
+    message: "HIGH CROWD DENSITY"
+    trigger_threshold: "high"
+    save_frame: false
+    save_clip: false
+    
+  # Cooldown between alerts (seconds)
+  cooldown: 120
+
+# =============================================================================
+# GLOBAL RULE SETTINGS
+# =============================================================================
+global:
+  # Enable/disable all rules
+  rules_enabled: true
+  
+  # Debug mode (verbose logging)
+  debug: false
+  
+  # Temporal smoothing window (frames)
+  smoothing_window: 5
+  
+  # Maximum simultaneous alerts
+  max_active_alerts: 10

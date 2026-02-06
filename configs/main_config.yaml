@@ -1,0 +1,142 @@
+# AI-Powered Video Surveillance System
+# Main Configuration File
+
+# =============================================================================
+# VIDEO SOURCE SETTINGS
+# =============================================================================
+video:
+  # Source type: "webcam", "rtsp", or "file"
+  source_type: "webcam"
+  
+  # Webcam settings
+  webcam:
+    device_index: 0
+    
+  # RTSP stream settings
+  rtsp:
+    url: "rtsp://username:password@ip:port/stream"
+    timeout: 10  # seconds
+    
+  # File input settings
+  file:
+    path: "input/sample_video.mp4"
+    
+  # Frame settings
+  frame:
+    target_fps: 10           # Target processing FPS
+    width: 1280              # Target frame width
+    height: 720              # Target frame height
+    skip_frames: 0           # Frames to skip between processing
+
+# =============================================================================
+# MODEL SETTINGS
+# =============================================================================
+models:
+  # Object Detection (YOLOv8)
+  object_detection:
+    model_name: "yolov8n.pt"          # Model weights (n/s/m/l/x)
+    confidence_threshold: 0.5          # Minimum detection confidence
+    iou_threshold: 0.45                # NMS IoU threshold
+    device: "auto"                     # "auto", "cpu", or "cuda:0"
+    
+  # Violence Detection (X3D)
+  violence_detection:
+    model_name: "x3d_m"               # X3D model variant
+    clip_length: 16                    # Frames per clip
+    violence_threshold: 0.6           # Violence probability threshold
+    device: "auto"
+
+# =============================================================================
+# DETECTION CLASSES
+# =============================================================================
+detection:
+  # COCO class IDs to detect
+  target_classes:
+    person: 0
+    knife: 43
+    scissors: 76
+    # Proxy classes for demonstration
+    bottle: 39        # Trash proxy
+    cup: 41          # Trash proxy
+    vase: 75         # Garbage bin proxy
+    potted_plant: 58 # Pothole proxy (limited)
+    
+  # Class categories for alerting
+  categories:
+    weapon: [43, 76]           # knife, scissors
+    trash: [39, 41]            # bottle, cup
+    garbage_bin: [75]          # vase
+    infrastructure: [58]       # potted_plant
+
+# =============================================================================
+# ALERT SETTINGS
+# =============================================================================
+alerts:
+  # Severity levels
+  severity:
+    informational: 1
+    warning: 2
+    critical: 3
+    
+  # Cooldown between same alerts (seconds)
+  cooldown:
+    weapon: 5
+    violence: 10
+    trash: 30
+    pothole: 60
+    
+  # Console output
+  console:
+    enabled: true
+    colored: true
+    
+  # File logging
+  logging:
+    enabled: true
+    file: "logs/alerts.log"
+    max_size_mb: 10
+    
+  # Save flagged frames
+  save_frames:
+    enabled: true
+    directory: "output/frames"
+    format: "jpg"
+    quality: 95
+
+# =============================================================================
+# UI SETTINGS
+# =============================================================================
+ui:
+  # OpenCV window settings
+  opencv:
+    window_name: "AI Surveillance System"
+    fullscreen: false
+    show_fps: true
+    show_detections: true
+    show_alerts: true
+    
+  # Overlay settings
+  overlay:
+    bbox_thickness: 2
+    font_scale: 0.6
+    colors:
+      person: [0, 255, 0]        # Green
+      weapon: [0, 0, 255]        # Red
+      trash: [255, 165, 0]       # Orange
+      violence: [255, 0, 255]    # Magenta
+      default: [255, 255, 255]   # White
+
+# =============================================================================
+# PERFORMANCE SETTINGS
+# =============================================================================
+performance:
+  # Buffer settings
+  clip_buffer_size: 16        # Frames for violence detection
+  
+  # Threading
+  use_threading: true
+  max_workers: 4
+  
+  # Memory management
+  max_queue_size: 30
+  clear_cache_interval: 100   # Frames
