@@ -1,0 +1,96 @@
+# ======================
+# Python
+# ======================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+env/
+.venv/
+
+# ======================
+# Node.js
+# ======================
+node_modules/
+.npm
+*.tgz
+
+# ======================
+# IDE
+# ======================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ======================
+# Environment
+# ======================
+.env
+.env.local
+.env.*.local
+*.env
+
+# ======================
+# Runtime Directories
+# ======================
+logs/
+output/
+uploads/
+storage/
+
+# ======================
+# Next.js
+# ======================
+frontend/.next/
+frontend/out/
+
+# ======================
+# Tests
+# ======================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# ======================
+# ML Models (large files)
+# ======================
+*.pt
+*.pth
+*.onnx
+*.h5
+!models/README.md
+
+# ======================
+# Misc
+# ======================
+*.log
+*.tmp
+*.temp
+.cache/
+*.log
+*.tmp
+*.temp
+.cache/
