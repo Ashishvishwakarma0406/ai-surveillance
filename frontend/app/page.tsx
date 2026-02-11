@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Navbar from '@/components/Navbar';
 import LiveStream from '@/components/LiveStream';
 import AlertsPanel from '@/components/AlertsPanel';
@@ -17,16 +17,48 @@ export default function Dashboard() {
         detections: 0,
         uptime: '0h 0m'
     });
+    const startTimeRef = useRef(Date.now());
 
     // WebSocket connection for real-time alerts
     const { isConnected, lastMessage } = useWebSocket('ws://localhost:8000/ws');
 
+    // Handle different WebSocket message types
     useEffect(() => {
-        if (lastMessage?.type === 'alert') {
-            setAlerts(prev => [lastMessage.data, ...prev].slice(0, 50));
-            setStats(prev => ({ ...prev, totalAlerts: prev.totalAlerts + 1 }));
+        if (!lastMessage) return;
+
+        switch (lastMessage.type) {
+            case 'alert':
+                setAlerts(prev => [lastMessage.data, ...prev].slice(0, 50));
+                setStats(prev => ({ ...prev, totalAlerts: prev.totalAlerts + 1 }));
+                break;
+
+            case 'detection_stats':
+                setStats(prev => ({
+                    ...prev,
+                    detections: lastMessage.data?.total_detections || prev.detections
+                }));
+                break;
+
+            case 'stream_status':
+                if (lastMessage.data?.status === 'started') {
+                    setStats(prev => ({ ...prev, activeStreams: prev.activeStreams + 1 }));
+                } else if (lastMessage.data?.status === 'stopped') {
+                    setStats(prev => ({ ...prev, activeStreams: Math.max(0, prev.activeStreams - 1) }));
+                }
+                break;
         }
     }, [lastMessage]);
+
+    // Update uptime counter
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+            const hours = Math.floor(elapsed / 3600);
+            const minutes = Math.floor((elapsed % 3600) / 60);
+            setStats(prev => ({ ...prev, uptime: `${hours}h ${minutes}m` }));
+        }, 60000);
+        return () => clearInterval(interval);
+    }, []);
 
     // Fetch initial stats
     useEffect(() => {
@@ -54,8 +86,8 @@ export default function Dashboard() {
                     <button
                         onClick={() => setActiveTab('live')}
                         className={`px-6 py-3 rounded-xl font-medium transition-all ${activeTab === 'live'
-                                ? 'bg-accent-primary text-white glow-accent'
-                                : 'glass-card text-gray-400 hover:text-white'
+                            ? 'bg-accent-primary text-white glow-accent'
+                            : 'glass-card text-gray-400 hover:text-white'
                             }`}
                     >
                         🎥 Live Stream
@@ -63,8 +95,8 @@ export default function Dashboard() {
                     <button
                         onClick={() => setActiveTab('upload')}
                         className={`px-6 py-3 rounded-xl font-medium transition-all ${activeTab === 'upload'
-                                ? 'bg-accent-primary text-white glow-accent'
-                                : 'glass-card text-gray-400 hover:text-white'
+                            ? 'bg-accent-primary text-white glow-accent'
+                            : 'glass-card text-gray-400 hover:text-white'
                             }`}
                     >
                         📤 Upload Video

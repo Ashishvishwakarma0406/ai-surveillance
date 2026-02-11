@@ -11,6 +11,8 @@ from typing import Dict, List, Optional, Any
 from pathlib import Path
 
 from backend.app.schemas.camera import CameraCreate, CameraStatus, CameraType
+from backend.app.schemas.alert import AlertCreate, AlertType, AlertSeverity
+from backend.app.services.alert_service import alert_service
 
 
 class CameraService:
@@ -137,6 +139,32 @@ class CameraService:
             self._jobs[job_id]["status"] = "completed"
             self._jobs[job_id]["progress"] = 100.0
             self._jobs[job_id]["completed_at"] = datetime.now().isoformat()
+            
+            # Save alerts from video processing to alert service
+            if self._jobs[job_id].get("results") and self._jobs[job_id]["results"].get("alerts"):
+                for alert_data in self._jobs[job_id]["results"]["alerts"]:
+                    try:
+                        # Map video pipeline alert type to AlertType enum
+                        alert_type_str = alert_data.get("type", "anomaly")
+                        alert_type = AlertType.WEAPON if alert_type_str == "weapon" else \
+                                     AlertType.VIOLENCE if alert_type_str == "violence" else \
+                                     AlertType.ANOMALY
+                        
+                        alert_create = AlertCreate(
+                            alert_type=alert_type,
+                            severity=AlertSeverity.CRITICAL if alert_data.get("severity") == "critical" else AlertSeverity.WARNING,
+                            message=alert_data.get("message", "Alert detected"),
+                            confidence=alert_data.get("confidence", 0.0),
+                            frame_id=alert_data.get("frame_id"),
+                            metadata={
+                                "timestamp": alert_data.get("timestamp"),
+                                "job_id": job_id,
+                                "source": "video_upload"
+                            }
+                        )
+                        await alert_service.create_alert(alert_create)
+                    except Exception as e:
+                        print(f"⚠️ Failed to save alert: {e}")
             
         except Exception as e:
             self._jobs[job_id]["status"] = "failed"

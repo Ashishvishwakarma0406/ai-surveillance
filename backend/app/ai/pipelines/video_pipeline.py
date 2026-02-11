@@ -194,7 +194,7 @@ class VideoPipeline:
             # Color based on class
             if det.class_name == "person":
                 color = (0, 255, 0)  # Green
-            elif det.class_name in ["knife", "scissors"]:
+            elif det.class_name in ["knife", "scissors", "baseball bat"]:
                 color = (0, 0, 255)  # Red for weapons
             else:
                 color = (255, 165, 0)  # Orange for others
@@ -233,7 +233,7 @@ class VideoPipeline:
         
         # Count max concurrent objects in this frame
         person_count = sum(1 for d in detections if d.class_name == "person")
-        weapon_count = sum(1 for d in detections if d.class_name in ["knife", "scissors", "gun", "pistol", "rifle"])
+        weapon_count = sum(1 for d in detections if d.class_name in ["knife", "scissors", "gun", "pistol", "rifle", "baseball bat"])
         
         results["summary"]["max_persons"] = max(results["summary"]["max_persons"], person_count)
         results["summary"]["max_weapons"] = max(results["summary"]["max_weapons"], weapon_count)
@@ -242,7 +242,7 @@ class VideoPipeline:
             frame_result["objects"].append(det.to_dict())
             
             # Generate weapon alert
-            if det.class_name in ["knife", "scissors", "gun", "pistol", "rifle"]:
+            if det.class_name in ["knife", "scissors", "gun", "pistol", "rifle", "baseball bat"]:
                 # Check duplicate alerts (simple temporal filter)
                 if not any(a["type"] == "weapon" and abs(a["timestamp"] - timestamp) < 2.0 for a in results["alerts"]):
                     results["alerts"].append({

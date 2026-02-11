@@ -67,6 +67,15 @@ class ViolenceClassifier:
         
         try:
             import torch
+            import sys
+            
+            # Monkey patch for pytorchvideo compatibility with torchvision >= 0.16
+            try:
+                import torchvision.transforms.functional as F
+                sys.modules["torchvision.transforms.functional_tensor"] = F
+            except ImportError:
+                pass
+
             from pytorchvideo.models.hub import x3d_m
             from pytorchvideo.transforms import (
                 ApplyTransformToKey,

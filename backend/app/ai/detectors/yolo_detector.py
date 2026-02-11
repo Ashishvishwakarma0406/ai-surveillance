@@ -45,13 +45,21 @@ class YOLODetector:
         0: "person",
         43: "knife",
         76: "scissors",
-        # Add more as needed
+        38: "baseball bat",
+        39: "baseball glove",
     }
+    
+    # Weapon class IDs that should trigger alerts
+    WEAPON_CLASS_IDS = {43, 76, 38}  # knife, scissors, baseball bat
+    
+    # Lower confidence threshold for weapons
+    WEAPON_CONFIDENCE = 0.35
+    PERSON_CONFIDENCE = 0.5
     
     def __init__(
         self,
         model_name: str = "yolov8n.pt",
-        confidence_threshold: float = 0.5,
+        confidence_threshold: float = 0.35,  # Lower default for weapons
         device: str = "auto"
     ):
         self.model_name = model_name
@@ -59,6 +67,8 @@ class YOLODetector:
         self.device = device
         self.model = None
         self._loaded = False
+        # Use agnostic NMS to allow overlapping detections of different classes
+        self.agnostic_nms = True
     
     def load(self) -> bool:
         """Load the YOLO model."""
@@ -119,7 +129,8 @@ class YOLODetector:
                 frame,
                 conf=self.confidence_threshold,
                 device=self.device,
-                verbose=False
+                verbose=False,
+                agnostic_nms=self.agnostic_nms  # Allow person+weapon overlap
             )
             
             for result in results:
@@ -175,7 +186,8 @@ class YOLODetector:
                 frame,
                 conf=self.confidence_threshold,
                 device=self.device,
-                verbose=False
+                verbose=False,
+                agnostic_nms=self.agnostic_nms  # Allow person+weapon overlap
             )
             
             for result in results:
