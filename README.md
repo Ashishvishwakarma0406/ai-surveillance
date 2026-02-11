@@ -2,6 +2,7 @@
 
 Real-time video analytics dashboard with AI-powered detection for public safety monitoring.
 
+
 ## 🚀 Features
 
 - **Real-time Video Analysis** - Process webcam, RTSP streams, or video files
