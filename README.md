@@ -3,7 +3,7 @@
 Real-time video analytics dashboard with AI-powered detection for public safety monitoring.
 
 
-## 🚀 Features
+## Features
 
 - **Real-time Video Analysis** - Process webcam, RTSP streams, or video files
 - **Object Detection** - YOLOv8-based detection of people, weapons, trash
@@ -11,7 +11,7 @@ Real-time video analytics dashboard with AI-powered detection for public safety 
 - **Web Dashboard** - Modern Next.js UI with real-time alerts
 - **REST API** - FastAPI backend with WebSocket support
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 ai-surveillance-system/
@@ -26,7 +26,7 @@ ai-surveillance-system/
 └── requirements.txt
 ```
 
-## 🔧 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Python 3.9 - 3.11
@@ -62,13 +62,13 @@ cd frontend && npm run dev
 | Dashboard | http://localhost:3000 |
 | API Docs | http://localhost:8000/docs |
 
-## 🐳 Docker
+## Docker
 
 ```bash
 docker-compose up -d
 ```
 
-## 📚 Documentation
+## Documentation
 
 See [docs/](docs/) for detailed documentation:
 - `PRD.md` - Product Requirements
