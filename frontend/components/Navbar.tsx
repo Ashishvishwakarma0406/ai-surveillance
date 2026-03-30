@@ -1,6 +1,7 @@
 'use client';
 
 import { Activity, Bell, Settings, Menu } from 'lucide-react';
+import Link from 'next/link';
 
 interface NavbarProps {
     isConnected: boolean;
@@ -32,18 +33,15 @@ export default function Navbar({ isConnected }: NavbarProps) {
                         </span>
                     </div>
 
-                    {/* Notifications */}
-                    <button className="relative p-2 rounded-lg hover:bg-dark-600 transition-colors">
-                        <Bell className="w-5 h-5 text-gray-400" />
-                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-accent-danger rounded-full text-xs flex items-center justify-center">
-                            3
-                        </span>
-                    </button>
+                    <Link href="/" className="px-3 py-2 hover:bg-dark-600 rounded-lg transition-colors flex items-center gap-2">
+                        <Activity className="w-5 h-5 text-gray-400" />
+                        <span className="text-sm hidden sm:inline text-gray-300">Dashboard</span>
+                    </Link>
 
-                    {/* Settings */}
-                    <button className="p-2 rounded-lg hover:bg-dark-600 transition-colors">
-                        <Settings className="w-5 h-5 text-gray-400" />
-                    </button>
+                    <Link href="/alerts" className="px-3 py-2 hover:bg-dark-600 rounded-lg transition-colors flex items-center gap-2 bg-dark-700/50">
+                        <Bell className="w-5 h-5 text-accent-primary" />
+                        <span className="text-sm hidden sm:inline text-white">Full History</span>
+                    </Link>
                 </div>
             </div>
         </nav>

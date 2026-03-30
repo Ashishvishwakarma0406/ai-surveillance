@@ -99,24 +99,42 @@ class StreamManager:
         
         self._total_detections += len(detections)
         
-        # Generate weapon alerts
-        for weapon in weapon_detections:
-            if self._can_alert("weapon"):
-                self._last_alert_time["weapon"] = datetime.now()
-                try:
-                    alert = AlertCreate(
-                        alert_type=AlertType.WEAPON,
-                        severity=AlertSeverity.CRITICAL,
-                        message=f"WEAPON DETECTED: {weapon.class_name.upper()} with {weapon.confidence:.0%} confidence",
-                        confidence=weapon.confidence,
-                        frame_id=frame_id,
-                        bbox=weapon.bbox,
-                        metadata={"class_name": weapon.class_name, "person_count": person_count}
-                    )
-                    await alert_service.create_alert(alert)
-                    print(f"🚨 ALERT: Weapon detected - {weapon.class_name}")
-                except Exception as e:
-                    print(f"Failed to create weapon alert: {e}")
+        # Generate weapon/danger alerts with context
+        if weapon_detections and self._can_alert("weapon"):
+            self._last_alert_time["weapon"] = datetime.now()
+            
+            unique_weapons = list(set(w.class_name for w in weapon_detections))
+            weapon_str = " and ".join(unique_weapons)
+            
+            if person_count > 0:
+                if person_count == 1:
+                    msg = f"Person armed with {weapon_str.upper()}"
+                elif len(weapon_detections) >= person_count:
+                    msg = f"{person_count} persons, all armed with {weapon_str.upper()}"
+                else:
+                    msg = f"{person_count} persons, {len(weapon_detections)} armed with {weapon_str.upper()}"
+            else:
+                msg = f"WEAPON DETECTED: {weapon_str.upper()}"
+            
+            best_weapon = max(weapon_detections, key=lambda w: w.confidence)
+            
+            try:
+                alert = AlertCreate(
+                    alert_type=AlertType.WEAPON,
+                    severity=AlertSeverity.CRITICAL,
+                    message=f"{msg} ({best_weapon.confidence:.0%} confidence)",
+                    confidence=best_weapon.confidence,
+                    frame_id=frame_id,
+                    bbox=best_weapon.bbox,
+                    metadata={
+                        "person_count": person_count,
+                        "weapon_types": unique_weapons,
+                    }
+                )
+                await alert_service.create_alert(alert)
+                print(f"DANGER ALERT: {msg}")
+            except Exception as e:
+                print(f"Failed to create weapon alert: {e}")
         
         # Generate crowd density alert
         if person_count >= 10 and self._can_alert("crowd"):
@@ -170,14 +188,16 @@ class StreamManager:
                 else AlertSeverity.WARNING
             )
             
+            # Use descriptive collision message with vehicle types
+            collision_msg = event.collision_description
+            
             try:
                 alert = AlertCreate(
                     alert_type=AlertType.ACCIDENT,
                     severity=severity,
                     message=(
-                        f"VEHICLE ACCIDENT DETECTED: "
-                        f"Confidence {event.confidence:.0%} | "
-                        f"Tracks {event.track_ids[0]} & {event.track_ids[1]}"
+                        f"{collision_msg} "
+                        f"({event.confidence:.0%} confidence)"
                     ),
                     confidence=event.confidence,
                     frame_id=frame_id,
@@ -187,11 +207,12 @@ class StreamManager:
                         "signals": event.signals,
                         "signal_details": event.signal_details,
                         "track_ids": list(event.track_ids),
+                        "vehicle_types": list(event.vehicle_types),
                     }
                 )
                 await alert_service.create_alert(alert)
                 print(
-                    f"🚗💥 ACCIDENT ALERT: {event.event_id} "
+                    f"COLLISION ALERT: {collision_msg} "
                     f"conf={event.confidence:.2f} "
                     f"tracks={event.track_ids}"
                 )

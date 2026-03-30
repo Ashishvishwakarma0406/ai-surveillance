@@ -8,7 +8,10 @@ from datetime import datetime
 from typing import List, Optional, Dict
 from collections import deque
 
-from backend.app.schemas.alert import Alert, AlertCreate, AlertStats, AlertSeverity
+from backend.app.schemas.alert import (
+    Alert, AlertCreate, AlertStats, AlertSeverity,
+    AlertCategory, ALERT_TYPE_TO_CATEGORY,
+)
 
 
 class AlertService:
@@ -27,6 +30,7 @@ class AlertService:
         limit: int = 50,
         severity: Optional[str] = None,
         alert_type: Optional[str] = None,
+        category: Optional[str] = None,
         acknowledged: Optional[bool] = None
     ) -> List[dict]:
         """Get alerts with filtering."""
@@ -36,6 +40,8 @@ class AlertService:
             alerts = [a for a in alerts if a["severity"] == severity]
         if alert_type:
             alerts = [a for a in alerts if a["alert_type"] == alert_type]
+        if category:
+            alerts = [a for a in alerts if a.get("category") == category]
         if acknowledged is not None:
             alerts = [a for a in alerts if a["acknowledged"] == acknowledged]
         
@@ -46,12 +52,19 @@ class AlertService:
         """Create a new alert."""
         self._counter += 1
         
+        # Auto-derive category if not explicitly provided
+        category = alert.category
+        if category is None:
+            category = ALERT_TYPE_TO_CATEGORY.get(alert.alert_type)
+        category_value = category.value if category else None
+        
         new_alert = {
             "id": self._counter,
             "alert_type": alert.alert_type.value,
             "severity": alert.severity.value,
             "message": alert.message,
             "confidence": alert.confidence,
+            "category": category_value,
             "camera_id": alert.camera_id,
             "frame_id": alert.frame_id,
             "bbox": alert.bbox,
@@ -98,6 +111,7 @@ class AlertService:
         
         by_type: Dict[str, int] = {}
         by_severity: Dict[str, int] = {}
+        by_category: Dict[str, int] = {}
         unacknowledged = 0
         
         for alert in alerts:
@@ -107,6 +121,10 @@ class AlertService:
             s = alert["severity"]
             by_severity[s] = by_severity.get(s, 0) + 1
             
+            c = alert.get("category")
+            if c:
+                by_category[c] = by_category.get(c, 0) + 1
+            
             if not alert["acknowledged"]:
                 unacknowledged += 1
         
@@ -114,6 +132,7 @@ class AlertService:
             total=len(alerts),
             by_type=by_type,
             by_severity=by_severity,
+            by_category=by_category,
             recent_24h=len(alerts),
             unacknowledged=unacknowledged
         )

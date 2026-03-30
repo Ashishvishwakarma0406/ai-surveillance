@@ -10,9 +10,12 @@ import { useWebSocket } from '@/lib/websocket';
 
 export default function Dashboard() {
     const [activeTab, setActiveTab] = useState<'live' | 'upload'>('live');
+    const [currentJobId, setCurrentJobId] = useState<string | null>(null);
     const [alerts, setAlerts] = useState<any[]>([]);
     const [stats, setStats] = useState({
         totalAlerts: 0,
+        dangerAlerts: 0,
+        crashAlerts: 0,
         activeStreams: 0,
         detections: 0,
         uptime: '0h 0m'
@@ -29,7 +32,15 @@ export default function Dashboard() {
         switch (lastMessage.type) {
             case 'alert':
                 setAlerts(prev => [lastMessage.data, ...prev].slice(0, 50));
-                setStats(prev => ({ ...prev, totalAlerts: prev.totalAlerts + 1 }));
+                setStats(prev => {
+                    const cat = lastMessage.data?.category;
+                    return {
+                        ...prev,
+                        totalAlerts: prev.totalAlerts + 1,
+                        dangerAlerts: prev.dangerAlerts + (cat === 'violence' ? 1 : 0),
+                        crashAlerts: prev.crashAlerts + (cat === 'traffic' ? 1 : 0),
+                    };
+                });
                 break;
 
             case 'detection_stats':
@@ -67,7 +78,9 @@ export default function Dashboard() {
             .then(data => {
                 setStats(prev => ({
                     ...prev,
-                    totalAlerts: data.total || 0
+                    totalAlerts: data.total || 0,
+                    dangerAlerts: data.by_category?.violence || 0,
+                    crashAlerts: data.by_category?.traffic || 0,
                 }));
             })
             .catch(() => { });
@@ -84,7 +97,7 @@ export default function Dashboard() {
                 {/* Tab Navigation */}
                 <div className="flex gap-4 mb-6 mt-8">
                     <button
-                        onClick={() => setActiveTab('live')}
+                        onClick={() => { setActiveTab('live'); setCurrentJobId(null); }}
                         className={`px-6 py-3 rounded-xl font-medium transition-all ${activeTab === 'live'
                             ? 'bg-accent-primary text-white glow-accent'
                             : 'glass-card text-gray-400 hover:text-white'
@@ -110,13 +123,13 @@ export default function Dashboard() {
                         {activeTab === 'live' ? (
                             <LiveStream />
                         ) : (
-                            <VideoUpload />
+                            <VideoUpload onJobStart={setCurrentJobId} />
                         )}
                     </div>
 
                     {/* Alerts Panel */}
                     <div className="lg:col-span-1">
-                        <AlertsPanel alerts={alerts} />
+                        <AlertsPanel alerts={alerts} jobIdFilter={currentJobId} />
                     </div>
                 </div>
             </main>

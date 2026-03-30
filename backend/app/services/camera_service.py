@@ -151,19 +151,33 @@ class CameraService:
                                 alert_type = AlertType.WEAPON if alert_type_str == "weapon" else \
                                              AlertType.VIOLENCE if alert_type_str == "violence" else \
                                              AlertType.ACCIDENT if alert_type_str == "accident" else \
-                                             AlertType.VEHICLE if alert_type_str == "vehicle" else \
                                              AlertType.ANOMALY
+                                
+                                # Map category string to enum
+                                from backend.app.schemas.alert import AlertCategory
+                                cat_str = alert_data.get("category")
+                                category = None
+                                if cat_str == "violence":
+                                    category = AlertCategory.VIOLENCE
+                                elif cat_str == "traffic":
+                                    category = AlertCategory.TRAFFIC
                                 
                                 alert_create = AlertCreate(
                                     alert_type=alert_type,
                                     severity=AlertSeverity.CRITICAL if alert_data.get("severity") == "critical" else AlertSeverity.WARNING,
                                     message=alert_data.get("message", "Alert detected"),
                                     confidence=alert_data.get("confidence", 0.0),
+                                    category=category,
                                     frame_id=alert_data.get("frame_id"),
+                                    bbox=alert_data.get("bbox"),
                                     metadata={
                                         "timestamp": alert_data.get("timestamp"),
                                         "job_id": job_id,
-                                        "source": "video_upload"
+                                        "source": "video_upload",
+                                        "vehicle_types": alert_data.get("vehicle_types"),
+                                        "weapon_types": alert_data.get("weapon_types"),
+                                        "signals": alert_data.get("signals"),
+                                        "person_count": alert_data.get("person_count"),
                                     }
                                 )
                                 await alert_service.create_alert(alert_create)

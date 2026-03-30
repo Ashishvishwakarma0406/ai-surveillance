@@ -39,12 +39,12 @@ class ViolenceClassifier:
     
     # Kinetics-400 violence-related class indices
     VIOLENCE_CLASSES = {
-        112: "wrestling",
-        119: "punching bag",
-        264: "sword fighting",
-        318: "slapping",
-        319: "pushing",
-        # Add more as needed
+        105: "drop kicking",
+        150: "headbutting",
+        259: "punching person",
+        314: "slapping",
+        345: "sword fighting",
+        395: "wrestling",
     }
     
     def __init__(
@@ -128,11 +128,11 @@ class ViolenceClassifier:
             import torch
             
             # Preprocess frames - X3D expects (B, C, T, H, W)
-            # First convert BGR to RGB and stack
+            # First convert BGR to RGB, resize to 256x256, and stack
             frames = np.stack([
-                cv2.cvtColor(f, cv2.COLOR_BGR2RGB) 
+                cv2.resize(cv2.cvtColor(f, cv2.COLOR_BGR2RGB), (256, 256)) 
                 for f in clip_frames
-            ])  # Shape: (T, H, W, C)
+            ])  # Shape: (T, 256, 256, C)
             
             frames = torch.from_numpy(frames).float()
             frames = frames / 255.0  # Normalize to [0, 1]

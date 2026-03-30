@@ -25,7 +25,8 @@ class VideoPipeline:
     
     def __init__(
         self,
-        confidence_threshold: float = 0.5,
+        # Lowered to improve recall for small weapons like pistols
+        confidence_threshold: float = 0.35,
         violence_threshold: float = 0.6,
         clip_length: int = 16,
         enable_accident_detection: bool = True,
@@ -94,8 +95,8 @@ class VideoPipeline:
         duration_est = (total_frames / fps) if total_frames > 0 else 0.0
         print(f"Video Info: {width}x{height} @ {fps}fps, {total_frames} frames ({duration_est:.1f}s)")
         
-        # Aggressive downscale for speed (Max width 640)
-        target_width = 640
+        # Downscale for speed, but keep enough detail for small weapons (Max width 720)
+        target_width = 720
         if width > target_width:
             scale = target_width / width
             width = target_width
@@ -148,10 +149,9 @@ class VideoPipeline:
         }
         
         frame_id = 0
-        # For object tracking (ByteTrack) and violence detection (X3D) to work mathematically,
-        # we CANNOT skip large gaps of frames. The Kalman filters lose their targets.
-        # Process every 2nd frame (yielding 15fps temporal resolution from a 30fps video).
-        process_every_n = 2
+        # Process every 3rd frame for speed while keeping tracking viable.
+        # ByteTrack Kalman filters can tolerate small gaps.
+        process_every_n = 3
         print(f"Processing 1 frame every {process_every_n} frames")
         
         clip_buffer: deque = deque(maxlen=self.clip_length)
@@ -189,14 +189,14 @@ class VideoPipeline:
                     frame = cv2.resize(frame, (width, height))
                 
                 # Process every nth frame for detection
-                if frame_id == 1 or frame_id % process_every_n == 0:
+                is_process_frame = (frame_id == 1 or frame_id % process_every_n == 0)
+                if is_process_frame:
                     last_detections = await run_in_threadpool(
                         self._process_frame,
                         frame, frame_id, fps, 
                         results, clip_buffer, prev_frame
                     )
-                
-                prev_frame = frame.copy()
+                    prev_frame = frame  # Only copy ref on processed frames
                 
                 # Draw cached detections on frame
                 annotated_frame = self._draw_detections(frame, last_detections)
@@ -211,8 +211,8 @@ class VideoPipeline:
                 
                 await run_in_threadpool(out.write, annotated_frame)
                 
-                # Yield progress periodically
-                if frame_id % 10 == 0:  # Update progress every 10 frames
+                # Yield progress every 30 frames to reduce overhead
+                if frame_id % 30 == 0:
                     yield progress, results
                     await asyncio.sleep(0)
 
@@ -232,13 +232,24 @@ class VideoPipeline:
         """Draw detection boxes on frame."""
         annotated = frame.copy()
         
+        def _is_weapon_label(name: str) -> bool:
+            if not name:
+                return False
+            n = name.lower()
+            weapon_keywords = [
+                "gun", "pistol", "rifle", "revolver", "firearm",
+                "knife", "blade", "machete", "scissors",
+                "bat", "baseball bat", "stick", "club", "hammer", "axe", "ax"
+            ]
+            return any(k in n for k in weapon_keywords)
+        
         for det in detections:
             x1, y1, x2, y2 = [int(v) for v in det.bbox]
             
             # Color based on class
             if det.class_name == "person":
                 color = (0, 255, 0)  # Green
-            elif det.class_name in ["knife", "scissors", "baseball bat"]:
+            elif _is_weapon_label(det.class_name):
                 color = (0, 0, 255)  # Red for weapons
             elif det.class_name in ["car", "truck", "bus"]:
                 color = (255, 200, 0)  # Cyan for large vehicles
@@ -293,7 +304,20 @@ class VideoPipeline:
         
         # Count max concurrent objects in this frame
         person_count = sum(1 for d in detections if d.class_name == "person")
-        weapon_count = sum(1 for d in detections if d.class_name in ["knife", "scissors", "gun", "pistol", "rifle", "baseball bat"])
+        # Treat a broader set of labels as weapons using keyword matching to
+        # capture model-specific synonyms (e.g., pistol/handgun/revolver).
+        def _is_weapon_label(name: str) -> bool:
+            if not name:
+                return False
+            n = name.lower()
+            weapon_keywords = [
+                "gun", "pistol", "rifle", "revolver", "firearm",
+                "knife", "blade", "machete", "scissors",
+                "bat", "baseball bat", "stick", "club", "hammer", "axe", "ax"
+            ]
+            return any(k in n for k in weapon_keywords)
+        
+        weapon_count = sum(1 for d in detections if _is_weapon_label(d.class_name))
         vehicle_count = sum(1 for d in detections if d.class_name in ["car", "motorcycle", "bus", "truck", "bicycle"])
         
         results["summary"]["max_persons"] = max(results["summary"]["max_persons"], person_count)
@@ -302,35 +326,44 @@ class VideoPipeline:
         
         for det in detections:
             frame_result["objects"].append(det.to_dict())
+        
+        # --- Contextual Weapon/Danger Alerts ---
+        weapon_names = [d.class_name for d in detections if _is_weapon_label(d.class_name)]
+        if weapon_names and not any(a["type"] == "weapon" and abs(a["timestamp"] - timestamp) < 2.0 for a in results["alerts"]):
+            # Build contextual message: "2 persons, 1 armed with knife"
+            unique_weapons = list(set(weapon_names))
+            weapon_str = " and ".join(unique_weapons)
             
-            # Generate weapon alert
-            if det.class_name in ["knife", "scissors", "gun", "pistol", "rifle", "baseball bat"]:
-                # Check duplicate alerts (simple temporal filter)
-                if not any(a["type"] == "weapon" and abs(a["timestamp"] - timestamp) < 2.0 for a in results["alerts"]):
-                    results["alerts"].append({
-                        "frame_id": frame_id,
-                        "timestamp": timestamp,
-                        "type": "weapon",
-                        "severity": "critical",
-                        "message": f"Weapon detected: {det.class_name}",
-                        "confidence": det.confidence,
-                        "bbox": det.bbox
-                    })
-                    results["summary"]["alert_count"] += 1
+            if person_count > 0 and len(weapon_names) > 0:
+                if person_count == 1:
+                    msg = f"Person armed with {weapon_str}"
+                elif len(weapon_names) >= person_count:
+                    msg = f"{person_count} persons, all armed with {weapon_str}"
+                else:
+                    msg = f"{person_count} persons, {len(weapon_names)} armed with {weapon_str}"
+            else:
+                msg = f"Weapon detected: {weapon_str}"
             
-            # Generate vehicle alert
-            elif det.class_name in ["car", "motorcycle", "bus", "truck", "bicycle"]:
-                if not any(a["type"] == "vehicle" and abs(a["timestamp"] - timestamp) < 2.0 for a in results["alerts"]):
-                    results["alerts"].append({
-                        "frame_id": frame_id,
-                        "timestamp": timestamp,
-                        "type": "vehicle",
-                        "severity": "info",
-                        "message": f"Vehicle detected: {det.class_name}",
-                        "confidence": det.confidence,
-                        "bbox": det.bbox
-                    })
-                    results["summary"]["alert_count"] += 1
+            # Use highest weapon confidence
+            best_conf = max(d.confidence for d in detections if _is_weapon_label(d.class_name))
+            best_weapon = next(d for d in detections if _is_weapon_label(d.class_name))
+            
+            results["alerts"].append({
+                "frame_id": frame_id,
+                "timestamp": timestamp,
+                "type": "weapon",
+                "category": "violence",
+                "severity": "critical",
+                "message": msg,
+                "confidence": best_conf,
+                "bbox": best_weapon.bbox,
+                "person_count": person_count,
+                "weapon_types": unique_weapons,
+            })
+            results["summary"]["alert_count"] += 1
+        
+        # NOTE: No "vehicle detected" alerts — vehicles are tracked for collision
+        # detection only. Alerts fire only on actual collisions (below).
         
         if frame_result["objects"]:
             results["detections"].append(frame_result)
@@ -354,23 +387,56 @@ class VideoPipeline:
                         violence_result.confidence
                     )
                     
+                    # Contextual violence message
+                    if person_count > 1:
+                        violence_msg = f"Fighting detected between {person_count} persons"
+                    else:
+                        violence_msg = f"Violence detected, {person_count} person(s) involved"
+                    
                     results["alerts"].append({
                         "frame_id": frame_id,
                         "timestamp": timestamp,
                         "type": "violence",
+                        "category": "violence",
                         "severity": "critical",
-                        "message": "Violence detected in video",
+                        "message": violence_msg,
                         "confidence": violence_result.confidence,
-                        "actions": violence_result.top_actions
+                        "actions": violence_result.top_actions,
+                        "person_count": person_count,
                     })
                     results["summary"]["alert_count"] += 1
                     
-                    clip_buffer.clear()  # Reset after detection
+                    # Emit fine-grained action alerts for punches/slaps/kicks per clip
+                    action_keywords = {
+                        "punch": "Punch detected",
+                        "slap": "Slap detected",
+                        "kick": "Kick detected",
+                        "headbutt": "Headbutt detected"
+                    }
+                    for act in violence_result.top_actions:
+                        act_name = act.get("action", "").lower()
+                        act_prob = float(act.get("probability", 0.0))
+                        for key, title in action_keywords.items():
+                            if key in act_name and act_prob >= 0.35:
+                                results["alerts"].append({
+                                    "frame_id": frame_id,
+                                    "timestamp": timestamp,
+                                    "type": "violence",
+                                    "category": "violence",
+                                    "severity": "critical",
+                                    "message": f"{title} — {person_count} persons in frame",
+                                    "confidence": act_prob,
+                                    "action": act_name,
+                                    "person_count": person_count,
+                                })
+                                results["summary"]["alert_count"] += 1
+                    
+                    clip_buffer.clear()  # Reset after detection to allow per-clip alerts
                     
             except Exception as e:
                 print(f"Violence check error: {e}")
         
-        # --- Accident Detection ---
+        # --- Accident / Collision Detection ---
         if self.accident_detector and tracked_objects:
             try:
                 accident_events = self.accident_detector.update(
@@ -399,18 +465,21 @@ class VideoPipeline:
                             "frame_id": frame_id,
                             "timestamp": timestamp,
                             "type": "accident",
+                            "category": "traffic",
                             "severity": event.severity,
-                            "message": f"Vehicle accident detected ({event.event_id})",
+                            "message": event.collision_description,
                             "confidence": event.confidence,
                             "bbox": event.collision_zone,
                             "signals": event.signals,
                             "signal_details": event.signal_details,
                             "track_ids": list(event.track_ids),
+                            "vehicle_types": list(event.vehicle_types),
                         })
                         results["summary"]["alert_count"] += 1
                         print(
-                            f"Accident detected at frame {frame_id} "
-                            f"(t={timestamp:.1f}s) conf={event.confidence:.2f}"
+                            f"COLLISION: {event.collision_description} "
+                            f"at frame {frame_id} (t={timestamp:.1f}s) "
+                            f"conf={event.confidence:.2f}"
                         )
             except Exception as e:
                 print(f"Accident detection error: {e}")

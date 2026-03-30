@@ -18,9 +18,10 @@ alert_service = AlertService()
 
 @router.get("/", response_model=List[Alert])
 async def get_alerts(
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=1000),
     severity: Optional[str] = None,
     alert_type: Optional[str] = None,
+    category: Optional[str] = None,
     acknowledged: Optional[bool] = None
 ):
     """Get alerts with optional filtering."""
@@ -28,6 +29,7 @@ async def get_alerts(
         limit=limit,
         severity=severity,
         alert_type=alert_type,
+        category=category,
         acknowledged=acknowledged
     )
 

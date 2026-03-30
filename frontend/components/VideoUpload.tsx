@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import { Upload, File, CheckCircle, XCircle, Loader2, X } from 'lucide-react';
 import { uploadVideo, getJobStatus } from '@/lib/api';
 
-export default function VideoUpload() {
+export default function VideoUpload({ onJobStart }: { onJobStart?: (jobId: string | null) => void }) {
     const [isDragging, setIsDragging] = useState(false);
     const [file, setFile] = useState<File | null>(null);
     const [uploadProgress, setUploadProgress] = useState(0);
@@ -56,6 +56,7 @@ export default function VideoUpload() {
             const response = await uploadVideo(file, setUploadProgress);
             const { job_id } = response.data;
             setJobId(job_id);
+            if (onJobStart) onJobStart(job_id);
             setStatus('processing');
 
             // Poll for job status
@@ -101,6 +102,7 @@ export default function VideoUpload() {
         setStatus('idle');
         setUploadProgress(0);
         setJobId(null);
+        if (onJobStart) onJobStart(null);
         setResults(null);
         setError(null);
         setVideoUrl(null);
@@ -217,29 +219,49 @@ export default function VideoUpload() {
                         </div>
                     </div>
 
-                    {/* Results Summary */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                        <div className="p-4 rounded-lg bg-dark-700">
+                    {/* Results Summary - Detection Stats */}
+                    <div className="grid grid-cols-3 gap-3 mb-3">
+                        <div className="p-3 rounded-lg bg-dark-700">
                             <p className="text-2xl font-bold">{results.summary?.max_persons || 0}</p>
-                            <p className="text-sm text-gray-400">Max Persons</p>
+                            <p className="text-xs text-gray-400">Persons</p>
                         </div>
-                        <div className="p-4 rounded-lg bg-dark-700">
-                            <p className="text-2xl font-bold text-accent-danger">
+                        <div className="p-3 rounded-lg bg-dark-700">
+                            <p className="text-2xl font-bold text-red-400">
                                 {results.summary?.max_weapons || 0}
                             </p>
-                            <p className="text-sm text-gray-400">Max Weapons</p>
+                            <p className="text-xs text-gray-400">Weapons</p>
                         </div>
-                        <div className="p-4 rounded-lg bg-dark-700">
-                            <p className="text-2xl font-bold text-accent-warning">
-                                {results.summary?.alert_count || 0}
+                        <div className="p-3 rounded-lg bg-dark-700">
+                            <p className="text-2xl font-bold text-blue-400">
+                                {results.summary?.max_vehicles || 0}
                             </p>
-                            <p className="text-sm text-gray-400">Alerts Generated</p>
+                            <p className="text-xs text-gray-400">Vehicles</p>
                         </div>
-                        <div className="p-4 rounded-lg bg-dark-700">
+                    </div>
+                    
+                    {/* Category Alert Counts */}
+                    <div className="grid grid-cols-3 gap-3 mb-6">
+                        <div className="p-3 rounded-lg bg-dark-700 border-l-2 border-red-500/50">
+                            <p className="text-2xl font-bold text-red-400">
+                                {results.alerts?.filter((a: any) => a.category === 'violence').length || 0}
+                            </p>
+                            <p className="text-xs text-gray-400 flex items-center gap-1">
+                                ⚔️ Danger Alerts
+                            </p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-dark-700 border-l-2 border-amber-500/50">
+                            <p className="text-2xl font-bold text-amber-400">
+                                {results.summary?.accident_count || 0}
+                            </p>
+                            <p className="text-xs text-gray-400 flex items-center gap-1">
+                                💥 Crash Alerts
+                            </p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-dark-700">
                             <p className="text-2xl font-bold">
                                 {results.video_info?.duration?.toFixed(1) || 0}s
                             </p>
-                            <p className="text-sm text-gray-400">Duration</p>
+                            <p className="text-xs text-gray-400">Duration</p>
                         </div>
                     </div>
 

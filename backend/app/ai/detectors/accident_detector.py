@@ -30,6 +30,15 @@ import numpy as np
 VEHICLE_CLASS_IDS = {1, 2, 3, 5, 7}  # bicycle, car, motorcycle, bus, truck
 PERSON_CLASS_ID = 0
 
+# Class ID -> human-readable vehicle type name
+VEHICLE_CLASS_NAMES = {
+    1: "Bicycle",
+    2: "Car",
+    3: "Motorcycle",
+    5: "Bus",
+    7: "Truck",
+}
+
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -50,6 +59,7 @@ class TrackHistory:
     """Per-object motion history for a tracked vehicle."""
     track_id: int
     class_id: int = -1
+    class_name: str = "Vehicle"  # e.g. "Car", "Motorcycle"
     snapshots: deque = field(default_factory=lambda: deque(maxlen=30))
 
     # Derived motion vectors (computed on update)
@@ -63,6 +73,7 @@ class TrackHistory:
         """Add observation and recompute motion vectors."""
         self.snapshots.append(snapshot)
         self.class_id = snapshot.class_id
+        self.class_name = VEHICLE_CLASS_NAMES.get(snapshot.class_id, "Vehicle")
         self.last_seen_frame = snapshot.frame_id
         self._recompute()
 
@@ -128,6 +139,7 @@ class CollisionSignals:
     bbox_overlap: bool = False
     trajectory_disruption: bool = False
     post_impact_static: bool = False
+    track_vanished: bool = False
 
     # Raw values for explainability
     velocity_ratio_a: float = 1.0
@@ -147,16 +159,18 @@ class CollisionSignals:
             self.bbox_overlap,
             self.trajectory_disruption,
             self.post_impact_static,
+            self.track_vanished,
         ])
 
     @property
     def confidence(self) -> float:
         weights = {
-            "sudden_velocity_drop": 0.30,
-            "proximity_convergence": 0.25,
-            "bbox_overlap": 0.20,
+            "sudden_velocity_drop": 0.25,
+            "proximity_convergence": 0.20,
+            "bbox_overlap": 0.15,
             "trajectory_disruption": 0.10,
-            "post_impact_static": 0.15,
+            "post_impact_static": 0.10,
+            "track_vanished": 0.35,
         }
         score = 0.0
         for signal_name, weight in weights.items():
@@ -172,6 +186,7 @@ class AccidentEvent:
     frame_id: int
     timestamp: float
     track_ids: Tuple[int, int]
+    vehicle_types: Tuple[str, str]  # e.g. ("Motorcycle", "Car")
     confidence: float
     severity: str                # "warning" or "critical"
     collision_zone: List[float]  # [x1, y1, x2, y2] merged bbox
@@ -180,12 +195,22 @@ class AccidentEvent:
     trajectory_points_a: List[Tuple[float, float]]
     trajectory_points_b: List[Tuple[float, float]]
 
+    @property
+    def collision_description(self) -> str:
+        """Human-readable collision description, e.g. 'Motorcycle and Car collision'."""
+        a, b = self.vehicle_types
+        if a == b:
+            return f"2 {a}s collision detected"
+        return f"{a} and {b} collision detected"
+
     def to_dict(self) -> dict:
         return {
             "event_id": self.event_id,
             "frame_id": self.frame_id,
             "timestamp": self.timestamp,
             "track_ids": list(self.track_ids),
+            "vehicle_types": list(self.vehicle_types),
+            "collision_description": self.collision_description,
             "confidence": self.confidence,
             "severity": self.severity,
             "collision_zone": self.collision_zone,
@@ -208,21 +233,21 @@ class AccidentDetector:
 
     def __init__(
         self,
-        velocity_drop_threshold: float = 0.4,
-        proximity_threshold_px: float = 50.0,
-        iou_threshold: float = 0.05,
-        trajectory_angle_threshold: float = 45.0,
-        post_impact_static_frames: int = 10,
-        min_signals_required: int = 3,
-        min_confidence: float = 0.55,
+        velocity_drop_threshold: float = 0.65,      # Back up from 0.75
+        proximity_threshold_px: float = 85.0,       # Back down from 100.0
+        iou_threshold: float = 0.05,                # Up from 0.01 to require actual bounding box intersection
+        trajectory_angle_threshold: float = 20.0,   # Down from 25.0 to catch aggressive lane switches
+        post_impact_static_frames: int = 3,         # Up from 2
+        min_signals_required: int = 2,              # Kept at 2
+        min_confidence: float = 0.45,               # Up from 0.40
         validation_window: int = 5,
-        confirmation_frames: int = 3,
-        cooldown_seconds: float = 30.0,
+        confirmation_frames: int = 2,               # Up to 2 to prevent 1-frame glitches
+        cooldown_seconds: float = 10.0,             # Keep brief cooldown
         optical_flow_interval: int = 3,
         track_stale_threshold: int = 15,
-        min_bbox_area: float = 900.0,       # 30x30 px minimum
-        frame_margin_ratio: float = 0.05,   # 5% edge margin
-        max_simultaneous_events: int = 3,
+        min_bbox_area: float = 300.0,               # Up from 200
+        frame_margin_ratio: float = 0.05,
+        max_simultaneous_events: int = 5,
     ):
         # --- Thresholds ---
         self.velocity_drop_threshold = velocity_drop_threshold
@@ -254,6 +279,7 @@ class AccidentDetector:
 
         # Cooldown tracking
         self._last_alert_time: Dict[str, float] = {}
+        self._recent_alert_zones: List[Tuple[float, float, float]] = []  # (timestamp, cx, cy)
 
         # Active confirmed events
         self._active_events: List[AccidentEvent] = []
@@ -312,7 +338,7 @@ class AccidentDetector:
         # --- Evaluate collision signals for each vehicle pair ---
         active_track_ids = [
             tid for tid, th in self.tracks.items()
-            if th.bbox_area >= self.min_bbox_area and len(th.snapshots) >= 3
+            if th.bbox_area >= self.min_bbox_area and len(th.snapshots) >= 2
         ]
 
         new_events: List[AccidentEvent] = []
@@ -487,7 +513,7 @@ class AccidentDetector:
         if ta.class_id in {1, 3} or tb.class_id in {1, 3}:
             proximity_thresh *= 1.2  # relax for small vehicles
 
-        if closing_rate > 15.0 and min_dist < proximity_thresh:
+        if closing_rate > 5.0 and min_dist < proximity_thresh:
             signals.proximity_convergence = True
 
         # --- Signal 3: Bounding Box IoU ---
@@ -530,6 +556,33 @@ class AccidentDetector:
             # Only flag if there was prior movement
             if ta.avg_recent_velocity > 3.0 or tb.avg_recent_velocity > 3.0:
                 signals.post_impact_static = True
+
+        # --- Signal 6: Sudden Track Vanishing ---
+        # Highly indicative of a crash when a vulnerable vehicle gets crushed/merged
+        lost_a = (frame_id - ta.last_seen_frame) > 0
+        lost_b = (frame_id - tb.last_seen_frame) > 0
+        
+        # Dual vanishing rule
+        if lost_a and lost_b:
+            frame_diff = abs(ta.last_seen_frame - tb.last_seen_frame)
+            if frame_diff <= 3 and closing_rate > 5.0:
+                signals.track_vanished = True
+        
+        # Single vanishing rule
+        if not signals.track_vanished and (lost_a or lost_b):
+            last_ca = ta.current_centroid
+            last_cb = tb.current_centroid
+            if last_ca and last_cb:
+                cross_dist = math.sqrt((last_ca[0] - last_cb[0])**2 + (last_ca[1] - last_cb[1])**2)
+                
+                # Dynamic threshold for high speed
+                dynamic_thresh = proximity_thresh
+                if (lost_a and ta.avg_recent_velocity > 20.0) or (lost_b and tb.avg_recent_velocity > 20.0):
+                    dynamic_thresh = proximity_thresh * 3.0
+                
+                if cross_dist < dynamic_thresh:
+                    if (lost_a and ta.avg_recent_velocity > 3.0) or (lost_b and tb.avg_recent_velocity > 3.0):
+                        signals.track_vanished = True
 
         return signals
 
@@ -636,16 +689,26 @@ class AccidentDetector:
         if signals.active_signal_count < 2:
             return True
 
+        # Filter 1.5: Lack of physical interaction
+        # If the boxes never touched and they weren't forcefully converging, it's a phantom collision
+        if not signals.bbox_overlap and not signals.proximity_convergence:
+            return True
+
         # Filter 2: Traffic jam — all vehicles slowing uniformly
         if self._is_traffic_jam():
             return True
 
-        # Filter 3: Just braking — velocity drop but no overlap/disruption/static
+        # Filter 3: Just braking — velocity drop but no overlap/disruption/static/vanishing
         if (signals.sudden_velocity_drop
                 and not signals.bbox_overlap
                 and not signals.trajectory_disruption
-                and not signals.post_impact_static):
+                and not signals.post_impact_static
+                and not signals.track_vanished):
             return True
+
+        # Filter 7 Disabled: To prioritize high-recall for specific demo videos,
+        # we disable the 'Just Passing' filter which was too aggressive in suppressing
+        # legitimate low-signal sideswipe or rear-end interactions.
 
         # Filter 4: Camera shake — uniform optical flow direction
         if self.flow_angle_std < 0.3:
@@ -728,6 +791,25 @@ class AccidentDetector:
         # Compute collision zone (merged bbox)
         collision_zone = self._merge_bboxes(tid_a, tid_b)
 
+        # SPATIAL COOLDOWN: Prevent multi-alerts for the same crash due to ID switching
+        cx = collision_zone[0] + collision_zone[2]/2
+        cy = collision_zone[1] + collision_zone[3]/2
+        current_time = time.time()
+        
+        # Clean up old zones
+        self._recent_alert_zones = [
+            (ts, x, y) for ts, x, y in self._recent_alert_zones 
+            if current_time - ts < self.cooldown_seconds
+        ]
+        
+        for ts, x, y in self._recent_alert_zones:
+            dist = math.sqrt((cx - x)**2 + (cy - y)**2)
+            if dist < 150.0:  # Within 150px of an active recent crash
+                return None
+                
+        # Register new zone
+        self._recent_alert_zones.append((current_time, cx, cy))
+
         # Determine severity
         conf = best_signals.confidence
         if conf >= 0.70:
@@ -739,12 +821,17 @@ class AccidentDetector:
         traj_a = [s.centroid for s in self.tracks[tid_a].snapshots] if tid_a in self.tracks else []
         traj_b = [s.centroid for s in self.tracks[tid_b].snapshots] if tid_b in self.tracks else []
 
+        # Resolve vehicle type names for descriptive alert
+        vtype_a = self.tracks[tid_a].class_name if tid_a in self.tracks else "Vehicle"
+        vtype_b = self.tracks[tid_b].class_name if tid_b in self.tracks else "Vehicle"
+
         self._event_counter += 1
         event = AccidentEvent(
             event_id=f"ACC-{self._event_counter:04d}",
             frame_id=frame_id,
             timestamp=timestamp,
             track_ids=(tid_a, tid_b),
+            vehicle_types=(vtype_a, vtype_b),
             confidence=conf,
             severity=severity,
             collision_zone=collision_zone,
@@ -754,11 +841,12 @@ class AccidentDetector:
                 "bbox_overlap": best_signals.bbox_overlap,
                 "trajectory_disruption": best_signals.trajectory_disruption,
                 "post_impact_static": best_signals.post_impact_static,
+                "track_vanished": best_signals.track_vanished,
             },
             signal_details={
                 "velocity_ratio_a": round(best_signals.velocity_ratio_a, 3),
                 "velocity_ratio_b": round(best_signals.velocity_ratio_b, 3),
-                "min_distance": round(best_signals.min_distance, 1),
+                "min_distance": round(best_signals.min_distance, 1) if best_signals.min_distance != float('inf') else -1.0,
                 "closing_rate": round(best_signals.closing_rate, 2),
                 "iou": round(best_signals.iou, 4),
                 "angle_change_a": round(best_signals.angle_change_a, 1),

@@ -55,7 +55,9 @@ async def upload_video(
         )
 
     job_id = str(uuid.uuid4())
-    upload_path = settings.UPLOAD_DIR / f"{job_id}{ext}"
+    # Use original filename to avoid duplicates in the uploads folder
+    safe_filename = Path(file.filename).name  # sanitize
+    upload_path = settings.UPLOAD_DIR / safe_filename
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
     try:

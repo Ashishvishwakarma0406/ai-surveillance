@@ -88,6 +88,67 @@ body {
   border-left: 4px solid #3b82f6;
 }
 
+/* Category Alert Styles */
+.category-violence {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(239, 68, 68, 0.05) 100%);
+  border-left: 4px solid #ef4444;
+}
+
+.category-traffic {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(245, 158, 11, 0.05) 100%);
+  border-left: 4px solid #f59e0b;
+}
+
+/* Category Tab */
+.category-tab {
+  position: relative;
+  padding: 0.375rem 0.875rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.category-tab:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.category-tab.active {
+  border-color: rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.08);
+}
+
+.category-tab.active-violence {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+}
+
+.category-tab.active-traffic {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.1);
+  color: #fcd34d;
+}
+
+/* Signal badge for collision details */
+.signal-badge {
+  display: inline-block;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.6875rem;
+  background: rgba(255,255,255,0.06);
+  color: #9ca3af;
+  margin-right: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.signal-badge.active {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fcd34d;
+}
+
 /* Video Container */
 .video-container {
   position: relative;

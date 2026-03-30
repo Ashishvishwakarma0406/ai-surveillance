@@ -1,12 +1,14 @@
 'use client';
 
-import { Activity, AlertTriangle, Camera, Clock } from 'lucide-react';
+import { Activity, Swords, Car, Camera, Clock } from 'lucide-react';
 
 interface Stats {
     totalAlerts: number;
     activeStreams: number;
     detections: number;
     uptime: string;
+    dangerAlerts?: number;
+    crashAlerts?: number;
 }
 
 interface StatsCardsProps {
@@ -16,11 +18,18 @@ interface StatsCardsProps {
 export default function StatsCards({ stats }: StatsCardsProps) {
     const cards = [
         {
-            title: 'Total Alerts',
-            value: stats.totalAlerts,
-            icon: AlertTriangle,
-            color: 'text-accent-danger',
-            bgColor: 'bg-accent-danger/10'
+            title: 'Danger Alerts',
+            value: stats.dangerAlerts ?? stats.totalAlerts,
+            icon: Swords,
+            color: 'text-red-400',
+            bgColor: 'bg-red-500/10'
+        },
+        {
+            title: 'Crash Alerts',
+            value: stats.crashAlerts ?? 0,
+            icon: Car,
+            color: 'text-amber-400',
+            bgColor: 'bg-amber-500/10'
         },
         {
             title: 'Active Streams',
@@ -28,13 +37,6 @@ export default function StatsCards({ stats }: StatsCardsProps) {
             icon: Camera,
             color: 'text-accent-success',
             bgColor: 'bg-accent-success/10'
-        },
-        {
-            title: 'Detections',
-            value: stats.detections,
-            icon: Activity,
-            color: 'text-accent-primary',
-            bgColor: 'bg-accent-primary/10'
         },
         {
             title: 'Uptime',
