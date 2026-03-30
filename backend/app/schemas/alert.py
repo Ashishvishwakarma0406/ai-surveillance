@@ -23,6 +23,8 @@ class AlertType(str, Enum):
     TRASH = "trash"
     INTRUSION = "intrusion"
     ANOMALY = "anomaly"
+    ACCIDENT = "accident"
+    VEHICLE = "vehicle"
 
 
 class AlertCreate(BaseModel):

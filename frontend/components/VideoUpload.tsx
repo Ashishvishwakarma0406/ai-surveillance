@@ -80,11 +80,18 @@ export default function VideoUpload() {
                 setStatus('error');
                 setError(data.error || 'Processing failed');
             } else {
-                // Continue polling
                 setTimeout(() => pollJobStatus(id), 2000);
             }
-        } catch {
-            // Continue polling on error
+        } catch (err: any) {
+            const statusCode = err?.response?.status;
+            if (statusCode === 404) {
+                setStatus('error');
+                setError(
+                    err?.response?.data?.detail ||
+                        'Job not found (server may have restarted before processing finished).'
+                );
+                return;
+            }
             setTimeout(() => pollJobStatus(id), 2000);
         }
     };

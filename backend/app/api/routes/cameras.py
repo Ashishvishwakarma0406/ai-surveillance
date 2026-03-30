@@ -7,15 +7,12 @@ Handles camera management and video uploads.
 import os
 import uuid
 from pathlib import Path
-from datetime import datetime
-from typing import Optional
-
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 
 from backend.app.core.config import settings
 from backend.app.services.camera_service import CameraService
-from backend.app.schemas.camera import CameraCreate, CameraResponse, CameraStatus
+from backend.app.schemas.camera import CameraCreate
 
 router = APIRouter()
 camera_service = CameraService()
@@ -38,6 +35,73 @@ async def list_cameras():
 async def add_camera(camera: CameraCreate):
     """Add a new camera source."""
     return await camera_service.add_camera(camera)
+
+
+# Static paths must be registered before /{camera_id} or "jobs" is captured as a camera ID.
+@router.post("/upload")
+async def upload_video(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...)
+):
+    """Upload a video file for processing."""
+    print(f"Received upload request: {file.filename}")
+
+    ext = Path(file.filename).suffix.lower()
+    if ext not in settings.ALLOWED_EXTENSIONS:
+        print(f"Invalid extension: {ext}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed: {settings.ALLOWED_EXTENSIONS}"
+        )
+
+    job_id = str(uuid.uuid4())
+    upload_path = settings.UPLOAD_DIR / f"{job_id}{ext}"
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+
+    try:
+        content = await file.read()
+        size = len(content)
+        print(f"File size: {size / (1024*1024):.2f} MB")
+
+        if size > settings.MAX_UPLOAD_SIZE:
+            print(f"File too large: {size}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"File too large. Max: {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB"
+            )
+
+        with open(upload_path, "wb") as f:
+            f.write(content)
+        print(f"File saved to {upload_path}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Upload error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    background_tasks.add_task(
+        camera_service.process_video,
+        job_id,
+        str(upload_path),
+        file.filename
+    )
+
+    return VideoUploadResponse(
+        job_id=job_id,
+        filename=file.filename,
+        status="queued",
+        message="Video uploaded. Processing started."
+    )
+
+
+@router.get("/jobs/{job_id}")
+async def get_job_status(job_id: str):
+    """Get video processing job status."""
+    job = await camera_service.get_job_status(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
 
 
 @router.get("/{camera_id}")
@@ -65,65 +129,3 @@ async def start_camera(camera_id: str):
 async def stop_camera(camera_id: str):
     """Stop camera stream processing."""
     return await camera_service.stop_stream(camera_id)
-
-
-@router.post("/upload")
-async def upload_video(
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...)
-):
-    """Upload a video file for processing."""
-    print(f"📥 Received upload request: {file.filename}")
-    
-    ext = Path(file.filename).suffix.lower()
-    if ext not in settings.ALLOWED_EXTENSIONS:
-        print(f"❌ Invalid extension: {ext}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file type. Allowed: {settings.ALLOWED_EXTENSIONS}"
-        )
-    
-    job_id = str(uuid.uuid4())
-    upload_path = settings.UPLOAD_DIR / f"{job_id}{ext}"
-    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-    
-    try:
-        content = await file.read()
-        size = len(content)
-        print(f"📄 File size: {size / (1024*1024):.2f} MB")
-        
-        if size > settings.MAX_UPLOAD_SIZE:
-            print(f"❌ File too large: {size}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"File too large. Max: {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB"
-            )
-        
-        with open(upload_path, "wb") as f:
-            f.write(content)
-        print(f"✅ File saved to {upload_path}")
-            
-    except Exception as e:
-        print(f"❌ Upload error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    
-    # Queue for background processing
-    background_tasks.add_task(
-        camera_service.process_video,
-        job_id,
-        str(upload_path),
-        file.filename
-    )
-    
-    return VideoUploadResponse(
-        job_id=job_id,
-        filename=file.filename,
-        status="queued",
-        message="Video uploaded. Processing started."
-    )
-
-
-@router.get("/jobs/{job_id}")
-async def get_job_status(job_id: str):
-    """Get video processing job status."""
-    return await camera_service.get_job_status(job_id)

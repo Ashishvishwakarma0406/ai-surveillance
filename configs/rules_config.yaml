@@ -138,6 +138,56 @@ crowd_detection:
   cooldown: 120
 
 # =============================================================================
+# ACCIDENT DETECTION RULES
+# =============================================================================
+accident_detection:
+  enabled: true
+  
+  # --- Collision Signal Thresholds ---
+  
+  # Velocity drop: ratio < threshold means impact-level deceleration
+  # 0.4 = vehicle must decelerate to <40% of its average speed
+  velocity_drop_threshold: 0.4
+  
+  # Proximity: minimum centroid distance (pixels at 640px width)
+  proximity_threshold_px: 50
+  
+  # Bounding box IoU: even slight physical overlap is significant
+  # 0.05 for cars, 0.03 for motorcycles (auto-adjusted)
+  iou_threshold: 0.05
+  
+  # Trajectory angle: degrees of heading change within 3 frames
+  # 45 for cars, 60 for two-wheelers (auto-adjusted)
+  trajectory_angle_threshold: 45
+  
+  # Post-impact: consecutive frames of near-zero velocity
+  post_impact_static_frames: 10
+  
+  # --- Validation ---
+  
+  # Minimum number of active signals to consider
+  min_signals_required: 3
+  
+  # Minimum weighted confidence score
+  min_confidence: 0.55
+  
+  # Sliding window size (frames) for temporal validation
+  validation_window: 5
+  
+  # Frames within window that must confirm collision
+  confirmation_frames: 3
+  
+  # --- Alert ---
+  alert:
+    severity: "critical"
+    message: "VEHICLE ACCIDENT DETECTED"
+    save_frame: true
+    save_clip: true
+  
+  # Cooldown between same-pair alerts (seconds)
+  cooldown: 30
+
+# =============================================================================
 # GLOBAL RULE SETTINGS
 # =============================================================================
 global:
@@ -152,3 +202,4 @@ global:
   
   # Maximum simultaneous alerts
   max_active_alerts: 10
+

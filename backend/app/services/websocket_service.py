@@ -33,7 +33,7 @@ class WebSocketManager:
         if channel in self.subscriptions:
             self.subscriptions[channel].add(websocket)
         
-        print(f"📡 WebSocket connected. Channel: {channel}. Total: {len(self.active_connections)}")
+        print(f"WebSocket connected. Channel: {channel}. Total: {len(self.active_connections)}")
     
     def disconnect(self, websocket: WebSocket):
         """Remove a WebSocket connection."""
@@ -42,7 +42,7 @@ class WebSocketManager:
         for channel in self.subscriptions.values():
             channel.discard(websocket)
         
-        print(f"📡 WebSocket disconnected. Total: {len(self.active_connections)}")
+        print(f"WebSocket disconnected. Total: {len(self.active_connections)}")
     
     async def broadcast(self, message: dict, channel: str = None):
         """Broadcast message to connected clients."""

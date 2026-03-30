@@ -24,18 +24,21 @@ class StreamManager:
         self._streams: Dict[str, Any] = {}
         self._detector = None
         self._detector_loaded = False
+        self._accident_detector = None
+        self._prev_frame = None  # For optical flow
         # Alert cooldowns to prevent spam
         self._last_alert_time: Dict[str, datetime] = {}
         self._alert_cooldowns = {
             "weapon": timedelta(seconds=5),
             "crowd": timedelta(seconds=30),
+            "accident": timedelta(seconds=30),
         }
         # Detection stats
         self._detection_counts: Dict[str, int] = {}
         self._total_detections = 0
     
     def _load_detector(self):
-        """Lazy load detector."""
+        """Lazy load detector and accident detector."""
         if self._detector_loaded:
             return
         
@@ -47,6 +50,14 @@ class StreamManager:
         except Exception as e:
             print(f"⚠️ Detector not loaded: {e}")
             self._detector_loaded = True
+        
+        try:
+            from backend.app.ai.detectors.accident_detector import AccidentDetector
+            self._accident_detector = AccidentDetector()
+            print("✅ Accident detector initialized for live stream")
+        except Exception as e:
+            print(f"⚠️ Accident detector not loaded: {e}")
+            self._accident_detector = None
     
     def _can_alert(self, alert_type: str) -> bool:
         """Check if enough time has passed since last alert of this type."""
@@ -139,6 +150,54 @@ class StreamManager:
             except Exception:
                 pass
     
+    async def _process_accident_events(
+        self,
+        accident_events: List[Any],
+        frame_id: int,
+    ):
+        """Generate alerts for confirmed accident events."""
+        from backend.app.services.alert_service import alert_service
+        from backend.app.services.websocket_service import ws_manager
+        
+        for event in accident_events:
+            if not self._can_alert("accident"):
+                continue
+            
+            self._last_alert_time["accident"] = datetime.now()
+            
+            severity = (
+                AlertSeverity.CRITICAL if event.severity == "critical"
+                else AlertSeverity.WARNING
+            )
+            
+            try:
+                alert = AlertCreate(
+                    alert_type=AlertType.ACCIDENT,
+                    severity=severity,
+                    message=(
+                        f"VEHICLE ACCIDENT DETECTED: "
+                        f"Confidence {event.confidence:.0%} | "
+                        f"Tracks {event.track_ids[0]} & {event.track_ids[1]}"
+                    ),
+                    confidence=event.confidence,
+                    frame_id=frame_id,
+                    bbox=event.collision_zone,
+                    metadata={
+                        "event_id": event.event_id,
+                        "signals": event.signals,
+                        "signal_details": event.signal_details,
+                        "track_ids": list(event.track_ids),
+                    }
+                )
+                await alert_service.create_alert(alert)
+                print(
+                    f"🚗💥 ACCIDENT ALERT: {event.event_id} "
+                    f"conf={event.confidence:.2f} "
+                    f"tracks={event.track_ids}"
+                )
+            except Exception as e:
+                print(f"Failed to create accident alert: {e}")
+    
     async def generate_frames(
         self, 
         source: str = "webcam",
@@ -222,17 +281,41 @@ class StreamManager:
                     continue
                 
                 detections = []
+                tracked_objects = []
                 
-                # Run detection
+                # Run detection with tracking
                 if self._detector:
                     try:
-                        detections, annotated = self._detector.detect_with_annotations(
-                            frame, frame_count
+                        detections, tracked_objects, annotated = (
+                            self._detector.detect_and_track(
+                                frame, frame_count
+                            )
                         )
-                        frame = annotated
                         
-                        # Process detections for alerts
-                        await self._process_detections(detections, frame_count, frame)
+                        # Process detections for weapon/crowd alerts
+                        await self._process_detections(detections, frame_count, annotated)
+                        
+                        # --- Accident Detection ---
+                        if self._accident_detector and tracked_objects:
+                            accident_events = self._accident_detector.update(
+                                tracked_objects=tracked_objects,
+                                frame=frame,
+                                prev_frame=self._prev_frame,
+                                frame_id=frame_count,
+                                fps=30.0,
+                            )
+                            
+                            # Draw accident overlays
+                            if accident_events:
+                                annotated = self._accident_detector.draw_overlays(
+                                    annotated, accident_events
+                                )
+                                await self._process_accident_events(
+                                    accident_events, frame_count
+                                )
+                        
+                        self._prev_frame = frame.copy()
+                        frame = annotated
                         
                     except Exception as e:
                         print(f"Detection error: {e}")
@@ -252,6 +335,17 @@ class StreamManager:
                     frame, f"Detections: {len(detections)}", (10, 60),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2
                 )
+                
+                # Vehicle tracking count overlay
+                vehicle_count = sum(
+                    1 for t in tracked_objects
+                    if t.get("class_id", -1) in {1, 2, 3, 5, 7}
+                )
+                if vehicle_count > 0:
+                    cv2.putText(
+                        frame, f"Vehicles: {vehicle_count}", (10, 90),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 200, 0), 2
+                    )
                 
                 # Encode
                 _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])

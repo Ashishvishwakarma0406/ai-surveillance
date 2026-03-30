@@ -53,6 +53,11 @@ detection:
   # COCO class IDs to detect
   target_classes:
     person: 0
+    bicycle: 1
+    car: 2
+    motorcycle: 3
+    bus: 5
+    truck: 7
     knife: 43
     scissors: 76
     # Proxy classes for demonstration
@@ -67,6 +72,7 @@ detection:
     trash: [39, 41]            # bottle, cup
     garbage_bin: [75]          # vase
     infrastructure: [58]       # potted_plant
+    vehicle: [1, 2, 3, 5, 7]  # bicycle, car, motorcycle, bus, truck
 
 # =============================================================================
 # ALERT SETTINGS
@@ -140,3 +146,24 @@ performance:
   # Memory management
   max_queue_size: 30
   clear_cache_interval: 100   # Frames
+
+# =============================================================================
+# ACCIDENT DETECTION SETTINGS
+# =============================================================================
+accident_detection:
+  enabled: true
+  
+  # Tracker
+  tracker: "bytetrack"            # Built into ultralytics
+  
+  # Optical flow
+  optical_flow_interval: 3        # Compute every Nth frame
+  
+  # Track management
+  track_history_length: 30        # Frames of history per vehicle
+  track_stale_threshold: 15       # Remove tracks not seen in N frames
+  
+  # Detection filtering
+  min_bbox_area: 900              # 30x30 pixel minimum
+  frame_margin_ratio: 0.05        # 5% edge margin
+  max_simultaneous_events: 3

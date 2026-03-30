@@ -7,8 +7,13 @@ Run with: uvicorn backend.app.main:app --reload --port 8000
 
 import os
 import sys
+import io
 from pathlib import Path
 from contextlib import asynccontextmanager
+
+# Force UTF-8 encoding for stdout/stderr to completely bypass CP1252 windows emoji crashes
+# sys.stdout = io.TextIOWrapper(sys.stdout.detach() if hasattr(sys.stdout, 'detach') else sys.stdout.buffer, encoding='utf8')
+# sys.stderr = io.TextIOWrapper(sys.stderr.detach() if hasattr(sys.stderr, 'detach') else sys.stderr.buffer, encoding='utf8')
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,8 +32,8 @@ from backend.app.services.websocket_service import ws_manager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
-    print("🚀 Starting AI Surveillance API...")
-    print(f"📁 Project root: {PROJECT_ROOT}")
+    print("Starting AI Surveillance API...")
+    print(f"Project root: {PROJECT_ROOT}")
     
     # Ensure directories exist
     os.makedirs(PROJECT_ROOT / "uploads", exist_ok=True)
@@ -39,7 +44,7 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    print("👋 Shutting down AI Surveillance API...")
+    print("Shutting down AI Surveillance API...")
 
 
 app = FastAPI(

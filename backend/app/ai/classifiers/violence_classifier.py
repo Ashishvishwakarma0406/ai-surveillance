@@ -99,11 +99,11 @@ class ViolenceClassifier:
             ])
             
             self._loaded = True
-            print(f"✅ Violence classifier loaded: {self.model_name} on {self.device}")
+            print(f"Violence classifier loaded: {self.model_name} on {self.device}")
             return True
             
         except Exception as e:
-            print(f"⚠️ Violence classifier not loaded: {e}")
+            print(f"Violence classifier not loaded: {e}")
             return False
     
     def classify(self, clip_frames: List[np.ndarray]) -> ViolenceResult:
