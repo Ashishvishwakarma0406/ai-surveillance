@@ -44,12 +44,12 @@ A full-stack surveillance platform that combines **YOLOv8 object detection**, **
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    Dashboard (Next.js)                   │
+│                    Dashboard (Next.js)                  │
 │  LiveStream ─── VideoUpload ─── AlertsPanel ─── Stats   │
 └──────────────────────┬──────────────────────────────────┘
                        │  HTTP + WebSocket
-┌──────────────────────▼──────────────────────────────────┐
-│                  FastAPI Backend                          │
+┌──────────────────────▼───────────────────────────────────┐
+│                  FastAPI Backend                         │
 │                                                          │
 │  /api/cameras  ─── Camera Service                        │
 │  /api/alerts   ─── Alert Service ──────► WebSocket (/ws) │
@@ -71,7 +71,7 @@ A full-stack surveillance platform that combines **YOLOv8 object detection**, **
 │              │  │Accident Engine│  │ Trajectory          │
 │              │  └───────────────┘  │                     │
 │              └─────────────────────┘                     │
-└─────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---
